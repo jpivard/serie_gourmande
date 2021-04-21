@@ -26,9 +26,21 @@ str(donnees)
 #Problème résolu !
 
 
+#Un problème subsiste : les dates sont lues comme des factorielles et non comme une série temporelle.
+#Il faut convertir les dates au format mois-année (yearmon).
+
+?as.Date
+?as.yearmon
+?strptime
+
+donnees$dates <-  as.yearmon(x,format="%Y-%m")
+str(donnees)
+
+
 #On va maintenant convertir la série des valeurs de la production au format zoo.
 donnees$valeurs=zoo(donnees$valeurs,order.by=donnees$dates)
 str(donnees$valeurs)
+
 
 
 
@@ -50,11 +62,45 @@ axis(side=1,abscisse)
 
 ?diff
 donnees$Dvaleurs=zoo(c(NA,diff(donnees$valeurs,1)),order.by=donnees$dates)
-str(donnees$Dvaleurs)  #Bizarre d'avoir des NA... Pb de format des dates ? Si oui  faire une petite fonction comme dans le TD5
+str(donnees$Dvaleurs)  
 
 plot(donnees$Dvaleurs[2:nrow(donnees)],type="l",xlab="Dates",ylab="Production de cacao,chocolat et confiseries")
 axis(side=1,abscisse)
-#A débugger !
+#La série différenciée d'ordre 1 semble stationnaire.Elle semble évoluer autour d'une moyenne proche de zéro, 
+# elle a sans doute un écart-type assez élevé puisqu'elle est assez volatile (surtout à partir de 2010, avant elle l'est moins).
+
+
+
+#On va faire un test de racine unité pour confirmer ou infirmer l'hypothèse de stationnarité.
+#Mais avant cela, pour savoir quel type de test est le plus adapté, reprenons le premier graphique et remarquons que la série de la production sembler présenter une légère tendance à la baisse.
+
+
+#Pour déterminer si introduire une tendance linéaire temporelle dans le modèle est pertinent, nous allons faire une régression linéaire de la série sur le temps t.
+regLinProdChoco=lm(valeurs~ dates,data=donnees)
+summary(regLinProdChoco)
+#Le coefficient négatif obtenu n'est pas significatif (P-value très élevée), donc il n'y a pas de tendance décroissante avec le temps.
+
+
+#On va donc faire un ADF "basique".
+adfTest(donnees$valeurs,lag=0)
+
+#La p-valeur est très élevée donc on ne peut rejeter l'hypothèse nulle de racine unitaire.
+#Mais pour que le modèle soit valide, il reste à s'assurer que les résidus ne sont pas autocorrélés.
+
+#On commence graphiquement avec un autocorrélogramme.
+
+adf=adfTest(donnees$valeurs,lag=0)
+str(adf)
+acf(adf@test$lm$residuals)
+
+#On observe que les autocorrélations de période 12 semblent importantes. A t-on manqué une saisonnalité ?
+
+acf(donnees$valeurs)
+
+#A priori fortes autocorrélations sur les premiers mois, puis diminuent mais restent assez élevées, sans qu'on puisse toutefois déceler une saisonnalité.
+
+
+
 
 
 
