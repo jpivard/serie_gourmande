@@ -33,14 +33,13 @@ str(donnees)
 ?as.yearmon
 ?strptime
 
-donnees$dates <-  as.yearmon(x,format="%Y-%m")
+donnees$dates <- as.yearmon(donnees$dates,format="%Y-%m")
 str(donnees)
 
 
 #On va maintenant convertir la série des valeurs de la production au format zoo.
 donnees$valeurs=zoo(donnees$valeurs,order.by=donnees$dates)
 str(donnees$valeurs)
-
 
 
 
@@ -57,6 +56,14 @@ axis(side=1,abscisse)
 #Dans tous les cas, il semblerait que la série ne soit pas stationnaire.
 #Pas de saisonnalité : la production semble être relativement répartie sur toute l'année (les pics ne surviennent pas au moment d'une année sur l'autre) ; il est vrai que la consommation de chocolat n'a pas vraiment de saison...
 
+
+#Assurons nous de l'absence de saisonnalité par un autocorrélogramme.
+
+acf(donnees$valeurs)
+#A priori autocorrélations plutôt élevées sur les premiers mois, puis diminuent mais restent assez élevées (au dessus des bornes), sans qu'on puisse toutefois déceler une saisonnalité.
+
+pacf(donnees$valeurs)
+#Pas d'autocorrélation partielle très élevée à part celle avec le mois suivant, même si celle de retard 24 dépasse les bornes.
 
 #Nous allons donc réaliser une différentiation ordinaire d'ordre 1 sur la série.
 
@@ -93,13 +100,20 @@ adf=adfTest(donnees$valeurs,lag=0)
 str(adf)
 acf(adf@test$lm$residuals)
 
-#On observe que les autocorrélations de période 12 semblent importantes. A t-on manqué une saisonnalité ?
+#On observe que l'autocorrélation de retard 1 est importante, mais ensuite la plupart ne dépassent pas les bornes. 
 
-acf(donnees$valeurs)
+#On effectue ensuite un test de Ljung-Box sur les résidus.
 
-#A priori fortes autocorrélations sur les premiers mois, puis diminuent mais restent assez élevées, sans qu'on puisse toutefois déceler une saisonnalité.
+Qtests= function(series, k, fitdf=0) {
+  pvals = apply(matrix(1:k), 1, FUN=function(l) {
+    pval = if (l<=fitdf) NA else Box.test(series, lag=l, type="Ljung-Box", fitdf=fitdf)$p.value
+    return(c("lag"=l,"pval"=pval))
+  })
+  return(t(pvals))
+}
+Qtests(adf@test$lm$residuals,24,length(adf@test$lm$coefficients))
 
-
+#Toutes les P-values sont inférieures à 5¨% donc on doit rejeter l'absence d'autocorrélation des résidus...
 
 
 
