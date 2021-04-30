@@ -1,6 +1,11 @@
 ################ Projet de séries temporelles #################################
 
 
+#Nous allons etudier l'indice de la production indistrielle (IPI) de la fabrication de cacao,
+#chocolat et produits de confiserie en France. Le référentiel est la base 100 en 2010.
+
+#La série est disponible sur : https://www.insee.fr/fr/statistiques/serie/001654155#Tableau
+
 
 #install.packages((c("zoo","tseries","forecast")))
 
@@ -16,16 +21,10 @@ setwd(dir="C:/Users/jérôme/Desktop/ENSAE/2A/Semestre 2/Séries temp/Projet")
 
 ####### On importe nos données
 
-donnees <- read.csv(file = "donnees.csv")
-str(donnees)
-#L'import ne se fait pas comme on le souhaiterait.Pour simplifier, on retire d'abord du csv les informations inutiles (nom de la série, identifiant...) et on renomme les colonnes (dates et valeurs par exemple), puis on adapte le code R.
-
 ?read.csv
 donnees <-read.csv("donnees.csv",sep=";")
 donnees$dates[1:12]
 str(donnees)
-#Problème résolu !
-
 
 #Un problème subsiste : les dates sont lues comme des factorielles et non comme une série temporelle.
 #Il faut convertir les dates au format mois-année (yearmon).
@@ -48,6 +47,14 @@ donnees$valeurs=donnees$valeurs[1:(T-4)]
 str(donnees$valeurs)
 
 
+sapply(donnees,function(x) sum(is.na(x)))
+#Il n'y a pas de valeur manquante dans la série en niveau.
+
+### Stat desc :
+summary(donnees$valeurs)
+#Ajouter des commentaires
+
+
 ####### Représentation graphique de la série et premières transformations
 
 
@@ -56,23 +63,31 @@ abscisse=1990+7*(0:5)
 plot(donnees$valeurs,type="l",xlab="Dates",ylab="Production de cacao,chocolat et confiseries")
 axis(side=1,abscisse)
 
+
 #Tendance légère à la hausse jusque très récemment (autour de 2016). 
 #Depuis il semblerait qu'il y ait une tendance à la baisse de la production. Interprétation ?
 #Dans tous les cas, il semblerait que la série ne soit pas stationnaire, et qu'on doive la modéliser selon un modèle non linéaire.
 
 #Pas de saisonnalité : la production semble être relativement répartie sur toute l'année (les pics ne surviennent pas au moment d'une année sur l'autre) ; il est vrai que la consommation de chocolat n'a pas vraiment de saison...
 
+#Tenter une transformation logarithmique ?
+log_valeurs=log(donnees$valeurs)
+plot(log_valeurs)
+#L'allure de la série reste la même, ça n'apporte pas grand chose.
+
+
 
 #Assurons nous de l'absence de saisonnalité par un autocorrélogramme.
 
 acf(donnees$valeurs,48)
 #A priori autocorrélations plutôt élevées sur les premiers mois, puis diminuent mais restent assez élevées (au dessus des bornes), sans qu'on puisse toutefois déceler une saisonnalité.
-#La série semble donc assez persistante.
 
 pacf(donnees$valeurs)
 #Pas d'autocorrélation partielle très élevée, celle avec le mois suivant est modérée (légèrement inférieure à 0,5), puis elles décroissent lentement, tout en restant longtemps significatives.
 #3 ans plus tard, on retouve encore des autocorrrélations significatives mais assez faibles.
-#Donc pas de saisonnalité mais il semblerait que la série soit intégrée. 
+#Dans tous les cas, l'autocorrélation n'est pas particulièrement forte aux ordres 3,6,12 ou 24
+
+#Donc pas de saisonnalité mais il semblerait que la série soit intégrée (même si la première autocorrélation est assez éloignée de un)
 
 
 #Pour nous en assurer, nous allons donc réaliser une différenciation ordinaire d'ordre 1 sur la série.
@@ -172,8 +187,9 @@ Qtests(adf@test$lm$residuals,24)
 
 
 
-#Pour vérifier encore davantage cette conclusion, on pourrait ajouter tests de Phillips-Perron et KPSS (cf TD6).
-
+#Pour vérifier encore davantage cette conclusion, on pourrait ajouter tests de Phillips-Perron
+PP.test(as.ts(donnees$Dvaleurs[2:nrow(donnees)]))
+#On peut effectivement rejeter l'hypothèse de non-stationnarité de la série différencié.
 
 
 ########### Partie 2 ####################
