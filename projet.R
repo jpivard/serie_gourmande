@@ -56,9 +56,9 @@ abscisse=1990+7*(0:5)
 plot(donnees$valeurs,type="l",xlab="Dates",ylab="Production de cacao,chocolat et confiseries")
 axis(side=1,abscisse)
 
-#En dépit d'importantes fluctuations, la série semble avoir à peu près l'allure d'une série stationnaire jusque très récemment (autour de 2016). Peut-être quand même une légère tendance à la hausse jusque 2016 ?
+#Tendance légère à la hausse jusque très récemment (autour de 2016). 
 #Depuis il semblerait qu'il y ait une tendance à la baisse de la production. Interprétation ?
-#Dans tous les cas, il semblerait que la série ne soit pas stationnaire.
+#Dans tous les cas, il semblerait que la série ne soit pas stationnaire, et qu'on doive la modéliser selon un modèle non linéaire.
 
 #Pas de saisonnalité : la production semble être relativement répartie sur toute l'année (les pics ne surviennent pas au moment d'une année sur l'autre) ; il est vrai que la consommation de chocolat n'a pas vraiment de saison...
 
@@ -70,11 +70,12 @@ acf(donnees$valeurs,48)
 #La série semble donc assez persistante.
 
 pacf(donnees$valeurs)
-#Pas d'autocorrélation partielle très élevée à part celle avec le mois suivant, même si celle de retard 24 dépasse les bornes.
+#Pas d'autocorrélation partielle très élevée, celle avec le mois suivant est modérée (légèrement inférieure à 0,5), puis elles décroissent lentement, tout en restant longtemps significatives.
+#3 ans plus tard, on retouve encore des autocorrrélations significatives mais assez faibles.
+#Donc pas de saisonnalité mais il semblerait que la série soit intégrée. 
 
 
-
-#Nous allons donc réaliser une différentiation ordinaire d'ordre 1 sur la série.
+#Pour nous en assurer, nous allons donc réaliser une différenciation ordinaire d'ordre 1 sur la série.
 
 ?diff
 donnees$Dvaleurs=zoo(c(NA,diff(donnees$valeurs,1)),order.by=donnees$dates)
@@ -88,7 +89,6 @@ axis(side=1,abscisse)
 
 #On va faire un test de racine unité pour confirmer ou infirmer l'hypothèse de stationnarité.
 #Mais avant cela, pour savoir quel type de test est le plus adapté, reprenons le premier graphique et remarquons que la série de la production sembler présenter une légère tendance à la baisse.
-
 
 #Pour déterminer si introduire une tendance linéaire temporelle dans le modèle est pertinent, nous allons faire une régression linéaire de la série sur le temps t.
 regLinProdChoco=lm(valeurs~ dates,data=donnees)
@@ -108,8 +108,7 @@ adf=adfTest(donnees$valeurs,lag=0)
 str(adf)
 acf(adf@test$lm$residuals)
 
-#On observe que l'autocorrélation de retard 1 est assez faible (-0.4), mais ensuite la plupart ne dépassent pas les bornes. La série différenciée semble donc stationnaire.
-#Donc pas d'intégration.
+#On observe que l'autocorrélation de retard 1 est assez faible (-0.4), mais ensuite la plupart ne dépassent pas les bornes. 
 
 #On effectue ensuite un test de Ljung-Box sur les résidus.
 
@@ -150,26 +149,31 @@ adf
 
 
 
-#Testons maintenant la racine unitaire pour la série differenciee dspread. La représentation graphique précedente
-# semble montrer l'absence de constante et de tendance non nulle. Vérifions avec une régression :
+#Testons maintenant la racine unitaire pour la série differenciee dspread. 
+# La représentation graphique précedente semble montrer l'absence de constante et de tendance non nulle. Vérifions avec une régression :
 
 summary(lm(donnees$Dvaleurs[2:nrow(donnees)]~donnees$dates[2:nrow(donnees)],data=donnees$valeurs))
 ##La regression lineaire sur les dates ne permet pas de detecter de tendance lineaire en temps (coefficient non significatif). 
 
 
-#On teste maintenant la série différenciée ((via le parametre lag de *adfTest* et en precisant qu'il n'y a pas de composante tendance dans la specification) :.
+#On teste maintenant la série différenciée ((via le parametre lag de *adfTest* et en precisant qu'il n'y a pas de composante tendance dans la specification) :
 
 adf <- adfTest_valid(donnees$Dvaleurs,24, type="nc")
 adf
 #On doit introduire 14 retards pour que les résidus ne soient plus autocorrélés.
-#On ne rejette pas la stationnarité.
 
 acf(adf@test$lm$residuals)
 Qtests(adf@test$lm$residuals,24)
 #Le modèle est bien valide.
 
 
-#Pas trop compris cette partie.
+#Le test rejette la racine unitaire, donc la série différenciée est stationnaire.
+#Conclusion : la série en niveau est I(1).
+
+
+
+#Pour vérifier encore davantage cette conclusion, on pourrait ajouter tests de Phillips-Perron et KPSS (cf TD6).
+
 
 
 ########### Partie 2 ####################
@@ -179,30 +183,27 @@ Qtests(adf@test$lm$residuals,24)
 
 ###### Fonctions d'autocorrélation de la série différenciée d'ordre 1 
 
-par(mfrow=c(1,2))
-acf(adf@test$lm$residuals)
-pacf(adf@test$lm$residuals)
 
 par(mfrow=c(1,2))
 acf(donnees$Dvaleurs[2:nrow(donnees)])
 pacf(donnees$Dvaleurs[2:nrow(donnees)])
 
-#L'ACF est significative jusqu'à l'ordre 3 donc on prend p*=3
-#Quant au PACF, on peut aller jusqu'à l'ordre 4, d'où le choix q*=4.
+#L'ACF est significative jusqu'à l'ordre 2 donc on prend p*=2 (on pourrait aller plus loin toutefois)
+#Quant au PACF, on peut aller jusqu'à l'ordre 4 maximum (on aurait pu s'arrêter à trois), d'où le choix q*=4.
 
-#Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 3 et q inférieur à 4.
+#Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 2 et q inférieur à 4.
 
 
 ####### Selection des modeles candidats a partir des criteres d'information
 
-paramGrid=expand.grid(p=seq(0,3),q=seq(0,4))
+paramGrid=expand.grid(p=seq(0,2),q=seq(0,4))
 str(paramGrid)
 paramGrid=paramGrid[-c(1),] #On ne teste pas combi où p et q valent zéro.
 
 tableModeles=data.frame("p"=paramGrid$p,"q"=paramGrid$q)
 str(tableModeles)
 
-x=donnees$Dvaleurs[2:length(donnees$Dvaleurs)] #A partir de l'observation 2 (après première date psq seulement là qu'on pt différencier)
+x=donnees$Dvaleurs[2:length(donnees$Dvaleurs)] #A partir de l'observation 2 (après première date puisque seulement là qu'on peut différencier)
 
 for (i in (1:nrow(paramGrid))){
   #tableModeles$p[i]=paramGrid$p[i]
@@ -216,11 +217,12 @@ tableModeles
 
 minAIC=which.min(tableModeles$AIC)
 tableModeles[minAIC,]
-#  L'AIC est à son minimum pour l'ARMA (3,4)
+#  L'AIC est à son minimum pour l'ARMA (1,2)
 
 modelAIC=arima(x,order=c(tableModeles$p[minAIC],0,tableModeles$q[minAIC]),include.mean=F)
 modelAIC
 AIC(modelAIC)
+#Comme l'ARIMA (1,1,2) minimise l'AIC, c'est le premier modèle retenu.
 
 
 #Regardons le BIC.
@@ -232,39 +234,46 @@ tableModeles[minBIC,]
 modelBIC=arima(x,order=c(tableModeles$p[minBIC],0,tableModeles$q[minBIC]),include.mean = F)
 modelBIC
 BIC(modelBIC)
+#Idem pour l'ARIMA (0,1,1) avec le BIC ; on le retient aussi.
 
 
 ##### Estimation des parametres et validation du modele final
 
-#Nous allons analyser la significativite des coefficients et la validite des modeles ARIMA(3,1,4) et ARIMA(0,1,1) obtenus a la question precedente.
+#Nous allons analyser la significativite des coefficients et la validite des modeles ARIMA(1,1,2) et ARIMA(0,1,1) obtenus a la question precedente.
 
 
-model1 = arma(donnees$Dvaleurs[2:nrow(donnees)],order=c(3,4))
+model1 = arma(donnees$Dvaleurs[2:nrow(donnees)],order=c(1,2))
 summary(model1)
-#Le dernier coefficient n'est pas significatif : il faut simplifier le modèle.
+#Tous les coefficients sont significatifs. Donc le modèle est bien ajusté.
 
 model2 = arma(donnees$Dvaleurs[2:nrow(donnees)],order=c(0,1))
 summary(model2)
-#Une moyenne mobile d'ordre 1 sur la série corrigée semble bien ajustée. Vérifions l'absence d'autocorrélation des résidus.
+#Une moyenne mobile d'ordre 1 sur la série corrigée semble également bien ajustée. 
+
+#Vérifions l'absence d'autocorrélation des résidus.
+
+lapply(seq(2,24),Box.test,x=model1$residuals,type="Box-Pierce",fitdf=3) #3 degrés de liberté
+# Les P valeurs sont élevées donc on ne rejette pas l'absence  l'autocorrélation des résidus : le modèle 1 est valide.
 
 lapply(seq(2,24),Box.test,x=model2$residuals,type="Box-Pierce",fitdf=1)  #1 degré de liberté
-# Les P valeurs sont élevées donc on ne rejette pas l'absence  l'autocorrélation des résidus : le modèle est valide.
-
-significativite=function(fittedModel){
-  t=fittedModel$coef/sqrt(diag(fittedModel$var.coef))
-  pval=(1-pnorm(abs(t)))*2
-  return(rbind(coef=fittedModel$coef,se=sqrt(diag(fittedModel$var.coef)),t,pval))
-}
-
-significativite(model2)  #Ne marche pas...
+# Les P valeurs sont élevées donc on ne rejette pas l'absence  l'autocorrélation des résidus : le modèle 2 est valide.
 
 
+#Les ARIMA(1,1,2) et ARIMA(0,1,1)  sont tous les deux bien ajustés à notre série, valides, et minimisent un des critères d'information, donc on les choisit.
+#Il va sans doute falloir en choisir un seul des deux...
 
 
 ### Comparaison avec le résultat de auto.arima
 
 auto.arima(donnees$Dvaleurs,seasonal=FALSE)
-#auto arima choisit quant à lui une moyenne mobile d'ordre 2.
+#auto arima choisit quant à lui une moyenne mobile d'ordre 2 (et centrée) sur la série différenciée.
+
+
+####### Partie 3 : Prévision ###############
+
+
+
+
 
 
 
