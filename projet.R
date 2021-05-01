@@ -1,7 +1,7 @@
 ################ Projet de séries temporelles #################################
 
 
-#Nous allons etudier l'indice de la production indistrielle (IPI) de la fabrication de cacao,
+#Nous allons etudier l'indice de la production industrielle (IPI) de la fabrication de cacao,
 #chocolat et produits de confiserie en France. Le référentiel est la base 100 en 2010.
 
 #La série est disponible sur : https://www.insee.fr/fr/statistiques/serie/001654155#Tableau
@@ -57,12 +57,12 @@ summary(donnees$valeurs)
 
 ####### Représentation graphique de la série et premières transformations
 
+#par(mfrow=c(1,1))
 
 ?plot
 abscisse=1990+7*(0:5)
 plot(donnees$valeurs,type="l",xlab="Dates",ylab="Production de cacao,chocolat et confiseries")
 axis(side=1,abscisse)
-
 
 #Tendance légère à la hausse jusque très récemment (autour de 2016). 
 #Depuis il semblerait qu'il y ait une tendance à la baisse de la production. Interprétation ?
@@ -80,12 +80,12 @@ plot(log_valeurs)
 #Assurons nous de l'absence de saisonnalité par un autocorrélogramme.
 
 acf(donnees$valeurs,48)
-#A priori autocorrélations plutôt élevées sur les premiers mois, puis diminuent mais restent assez élevées (au dessus des bornes), sans qu'on puisse toutefois déceler une saisonnalité.
+#A priori autocorrélations plutôt élevées sur les premiers mois, puis diminuent mais restent assez élevées (au dessus des bornes), sans qu'on puisse toutefois déceler une saisonnalité (pas de régularité).
 
 pacf(donnees$valeurs)
 #Pas d'autocorrélation partielle très élevée, celle avec le mois suivant est modérée (légèrement inférieure à 0,5), puis elles décroissent lentement, tout en restant longtemps significatives.
 #3 ans plus tard, on retouve encore des autocorrrélations significatives mais assez faibles.
-#Dans tous les cas, l'autocorrélation n'est pas particulièrement forte aux ordres 3,6,12 ou 24
+#Dans tous les cas, l'autocorrélation n'est pas particulièrement forte tous les ordres multiples de  3,6,12 ou 24
 
 #Donc pas de saisonnalité mais il semblerait que la série soit intégrée (même si la première autocorrélation est assez éloignée de un)
 
@@ -200,21 +200,21 @@ PP.test(as.ts(donnees$Dvaleurs[2:nrow(donnees)]))
 ###### Fonctions d'autocorrélation de la série différenciée d'ordre 1 
 
 
-par(mfrow=c(1,2))
+par(mfrow=c(1,1))
 acf(donnees$Dvaleurs[2:nrow(donnees)])
 pacf(donnees$Dvaleurs[2:nrow(donnees)])
 
-#L'ACF est significative jusqu'à l'ordre 2 donc on prend p*=2 (on pourrait aller plus loin toutefois)
-#Quant au PACF, on peut aller jusqu'à l'ordre 4 maximum (on aurait pu s'arrêter à trois), d'où le choix q*=4.
+#L'ACF est significative jusqu'à l'ordre 2 donc on prend q*=2 (on pourrait aller plus loin toutefois)
+#Quant au PACF, on peut aller jusqu'à l'ordre 4 maximum (on aurait pu s'arrêter à trois), d'où le choix p*=4.
 
-#Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 2 et q inférieur à 4.
+#Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 4 et q inférieur à 2.
 
 
 ####### Selection des modeles candidats a partir des criteres d'information
 
-paramGrid=expand.grid(p=seq(0,2),q=seq(0,4))
+paramGrid=expand.grid(p=seq(0,4),q=seq(0,2))
 str(paramGrid)
-paramGrid=paramGrid[-c(1),] #On ne teste pas combi où p et q valent zéro.
+paramGrid=paramGrid[-c(1),] #On ne teste pas la combinaison où p et q valent zéro.
 
 tableModeles=data.frame("p"=paramGrid$p,"q"=paramGrid$q)
 str(tableModeles)
@@ -245,7 +245,7 @@ AIC(modelAIC)
 
 minBIC=which.min(tableModeles$BIC)
 tableModeles[minBIC,]
-#Le BIC est à son minimum pour l'ARMA (0,1)
+#Le BIC est à son minimum pour l'ARMA (0,1), i.e. une moyenne mobile d'ordre 1.
 
 modelBIC=arima(x,order=c(tableModeles$p[minBIC],0,tableModeles$q[minBIC]),include.mean = F)
 modelBIC
@@ -256,7 +256,6 @@ BIC(modelBIC)
 ##### Estimation des parametres et validation du modele final
 
 #Nous allons analyser la significativite des coefficients et la validite des modeles ARIMA(1,1,2) et ARIMA(0,1,1) obtenus a la question precedente.
-
 
 model1 = arma(donnees$Dvaleurs[2:nrow(donnees)],order=c(1,2))
 summary(model1)
