@@ -1,6 +1,11 @@
 ################ Projet de séries temporelles #################################
 
 
+#Nous allons etudier l'indice de la production industrielle (IPI) de la fabrication de cacao,
+#chocolat et produits de confiserie en France. Le référentiel est la base 100 en 2010.
+
+#La série est disponible sur : https://www.insee.fr/fr/statistiques/serie/001654155#Tableau
+
 
 #install.packages((c("zoo","tseries","forecast")))
 
@@ -16,16 +21,10 @@ setwd(dir="C:/Users/jérôme/Desktop/ENSAE/2A/Semestre 2/Séries temp/Projet")
 
 ####### On importe nos données
 
-donnees <- read.csv(file = "donnees.csv")
-str(donnees)
-#L'import ne se fait pas comme on le souhaiterait.Pour simplifier, on retire d'abord du csv les informations inutiles (nom de la série, identifiant...) et on renomme les colonnes (dates et valeurs par exemple), puis on adapte le code R.
-
 ?read.csv
 donnees <-read.csv("donnees.csv",sep=";")
 donnees$dates[1:12]
 str(donnees)
-#Problème résolu !
-
 
 #Un problème subsiste : les dates sont lues comme des factorielles et non comme une série temporelle.
 #Il faut convertir les dates au format mois-année (yearmon).
@@ -48,8 +47,17 @@ donnees$valeurs=donnees$valeurs[1:(T-4)]
 str(donnees$valeurs)
 
 
+sapply(donnees,function(x) sum(is.na(x)))
+#Il n'y a pas de valeur manquante dans la série en niveau.
+
+### Stat desc :
+summary(donnees$valeurs)
+#Ajouter des commentaires
+
+
 ####### Représentation graphique de la série et premières transformations
 
+par(mfrow=c(1,2))
 
 ?plot
 abscisse=1990+7*(0:5)
@@ -62,26 +70,41 @@ axis(side=1,abscisse)
 
 #Pas de saisonnalité : la production semble être relativement répartie sur toute l'année (les pics ne surviennent pas au moment d'une année sur l'autre) ; il est vrai que la consommation de chocolat n'a pas vraiment de saison...
 
+#Tenter une transformation logarithmique ?
+log_valeurs=log(donnees$valeurs)
+plot(log_valeurs)
+#L'allure de la série reste la même, ça n'apporte pas grand chose.
+
+
 
 #Assurons nous de l'absence de saisonnalité par un autocorrélogramme.
 
 acf(donnees$valeurs,48)
-#A priori autocorrélations plutôt élevées sur les premiers mois, puis diminuent mais restent assez élevées (au dessus des bornes), sans qu'on puisse toutefois déceler une saisonnalité.
-#La série semble donc assez persistante.
+#A priori autocorrélations plutôt élevées sur les premiers mois, puis diminuent mais restent assez élevées (au dessus des bornes), sans qu'on puisse toutefois déceler une saisonnalité (pas de régularité).
 
 pacf(donnees$valeurs)
 #Pas d'autocorrélation partielle très élevée, celle avec le mois suivant est modérée (légèrement inférieure à 0,5), puis elles décroissent lentement, tout en restant longtemps significatives.
 #3 ans plus tard, on retouve encore des autocorrrélations significatives mais assez faibles.
-#Donc pas de saisonnalité mais il semblerait que la série soit intégrée. 
+#Dans tous les cas, l'autocorrélation n'est pas particulièrement forte tous les ordres multiples de  3,6,12 ou 24
+
+#Donc pas de saisonnalité mais il semblerait que la série soit intégrée (même si la première autocorrélation est assez éloignée de un)
 
 
 #Pour nous en assurer, nous allons donc réaliser une différenciation ordinaire d'ordre 1 sur la série.
 
 ?diff
 donnees$Dvaleurs=zoo(c(NA,diff(donnees$valeurs,1)),order.by=donnees$dates)
-str(donnees$Dvaleurs)  
+str(donnees$Dvaleurs)
 
-plot(donnees$Dvaleurs[2:nrow(donnees)],type="l",xlab="Dates",ylab=" Série différenciée de la production de cacao,chocolat et confiseries")
+
+par(mfrow=c(2,1))
+
+?plot
+abscisse=1990+7*(0:5)
+plot(donnees$valeurs,type="l",xlab="Dates",ylab="Série en valeur")
+axis(side=1,abscisse)
+
+plot(donnees$Dvaleurs[2:nrow(donnees)],type="l",xlab="Dates",ylab=" Série différenciée")
 axis(side=1,abscisse)
 #La série différenciée d'ordre 1 semble stationnaire.Elle semble évoluer autour d'une moyenne proche de zéro, 
 # elle a sans doute un écart-type assez élevé puisqu'elle est assez volatile (surtout à partir de 2010, avant elle l'est moins).
@@ -98,16 +121,13 @@ summary(regLinProdChoco)
 
 #On va donc faire un ADF "basique", i.e. sans constante ni tendance, d'abord sur la série originale.
 adfTest(donnees$valeurs,lag=0)
-
 #La p-valeur est très élevée donc on ne peut rejeter l'hypothèse nulle de racine unitaire.
 #Mais pour que le modèle soit valide, il reste à s'assurer que les résidus ne sont pas autocorrélés.
 
 #On commence graphiquement avec un autocorrélogramme.
-
 adf=adfTest(donnees$valeurs,lag=0)
 str(adf)
 acf(adf@test$lm$residuals)
-
 #On observe que l'autocorrélation de retard 1 est assez faible (-0.4), mais ensuite la plupart ne dépassent pas les bornes. 
 
 #On effectue ensuite un test de Ljung-Box sur les résidus.
@@ -172,8 +192,9 @@ Qtests(adf@test$lm$residuals,24)
 
 
 
-#Pour vérifier encore davantage cette conclusion, on pourrait ajouter tests de Phillips-Perron et KPSS (cf TD6).
-
+#Pour vérifier encore davantage cette conclusion, on pourrait ajouter tests de Phillips-Perron
+PP.test(as.ts(donnees$Dvaleurs[2:nrow(donnees)]))
+#On peut effectivement rejeter l'hypothèse de non-stationnarité de la série différenciée.
 
 
 ########### Partie 2 ####################
@@ -184,21 +205,21 @@ Qtests(adf@test$lm$residuals,24)
 ###### Fonctions d'autocorrélation de la série différenciée d'ordre 1 
 
 
-par(mfrow=c(1,2))
+par(mfrow=c(1,1))
 acf(donnees$Dvaleurs[2:nrow(donnees)])
 pacf(donnees$Dvaleurs[2:nrow(donnees)])
 
-#L'ACF est significative jusqu'à l'ordre 2 donc on prend p*=2 (on pourrait aller plus loin toutefois)
-#Quant au PACF, on peut aller jusqu'à l'ordre 4 maximum (on aurait pu s'arrêter à trois), d'où le choix q*=4.
+#L'ACF est significative jusqu'à l'ordre 2 donc on prend q*=2 (on pourrait aller plus loin toutefois, mais cela complexifierait sans doute trop le modèle)
+#Quant au PACF, on peut aller jusqu'à l'ordre 4 maximum (on aurait pu s'arrêter à trois), d'où le choix p*=4.
 
-#Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 2 et q inférieur à 4.
+#Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 4 et q inférieur à 2.
 
 
 ####### Selection des modeles candidats a partir des criteres d'information
 
-paramGrid=expand.grid(p=seq(0,2),q=seq(0,4))
+paramGrid=expand.grid(p=seq(0,4),q=seq(0,2))
 str(paramGrid)
-paramGrid=paramGrid[-c(1),] #On ne teste pas combi où p et q valent zéro.
+paramGrid=paramGrid[-c(1),] #On ne teste pas la combinaison où p et q valent zéro.
 
 tableModeles=data.frame("p"=paramGrid$p,"q"=paramGrid$q)
 str(tableModeles)
@@ -229,7 +250,7 @@ AIC(modelAIC)
 
 minBIC=which.min(tableModeles$BIC)
 tableModeles[minBIC,]
-#Le BIC est à son minimum pour l'ARMA (0,1)
+#Le BIC est à son minimum pour l'ARMA (0,1), i.e. une moyenne mobile d'ordre 1.
 
 modelBIC=arima(x,order=c(tableModeles$p[minBIC],0,tableModeles$q[minBIC]),include.mean = F)
 modelBIC
@@ -240,7 +261,6 @@ BIC(modelBIC)
 ##### Estimation des parametres et validation du modele final
 
 #Nous allons analyser la significativite des coefficients et la validite des modeles ARIMA(1,1,2) et ARIMA(0,1,1) obtenus a la question precedente.
-
 
 model1 = arma(donnees$Dvaleurs[2:nrow(donnees)],order=c(1,2))
 summary(model1)
@@ -262,14 +282,43 @@ lapply(seq(2,24),Box.test,x=model2$residuals,type="Box-Pierce",fitdf=1)  #1 degr
 #Les ARIMA(1,1,2) et ARIMA(0,1,1)  sont tous les deux bien ajustés à notre série, valides, et minimisent un des critères d'information, donc on les choisit.
 #Il va sans doute falloir en choisir un seul des deux...
 
+#Il semble plus raisonnable de retenir un modèle légèrement plus complexe qu'une simple moyenne mobile d'ordre 1, dans la mesure où les autocorrélations partielles ne sont plus significatives à des ordres élevés (i.e. logique d'inclure une partie AR)
+
+
+#Autre critère de choix possible : regarder les R carrés.
+
+adj_r2 = function(model,sample=x){
+  ss_res = sum(model$residuals^2) #somme des residus au carre
+  p = length(model$model$phi) #recupere l'ordre AR
+  q = length(model$model$theta[model$model$theta!=0]) #recupere l'ordre MA
+  ss_tot <- sum(sample[-max(p,q)]^2) #somme des observations de l'echantillon au carre
+  n <- length(sample[-max(p,q)]) #taille de l'echantillon
+  adj_r2 <- 1-(ss_res/(n-p-q-1))/(ss_tot/(n-1)) #r2 ajuste ; il n'y a plus croissance mécanique de ce type de r2 ; donc c'est un bon allié, il permet de viser la parcimonie du modèle
+  return(adj_r2)
+}
+
+modelInitialAIC=arima(donnees$valeurs,c(0,0,1))
+modelInitialAIC
+modelInitialBIC=arima(donnees$valeurs,c(0,1,2))
+modelInitialBIC
+adj_r2(modelInitialAIC,sample=donnees$valeurs)
+adj_r2(modelInitialBIC,sample=donnees$valeurs)
+
+#On obtient des R carrés ajustés très élevés (sans doute trop, cela s'explique par l'intégration), ce qui impose de manier cette statistique avec prudence sur des séries temp.
+#En tout cas, la conclusion est la même : le modèle un peu plus complexe aurait un pouvoir explicatif légèrement supérieur (on l'avait deviné avant le test)
+
+#On va donc retenir l'ARMA(1,2) sur Y_t, i.e. un ARIMA (1,1,2) sur la série X_t.
+
 
 ### Comparaison avec le résultat de auto.arima
 
 auto.arima(donnees$Dvaleurs,seasonal=FALSE)
-#auto arima choisit quant à lui une moyenne mobile d'ordre 2 (et centrée) sur la série différenciée.
+#auto arima choisit quant à lui une moyenne mobile d'ordre 2 (et centrée) sur la série différenciée. Mais il faut être prudent car cette commande ne vérifie pas la significativité, et la validité.
+
 
 
 ####### Partie 3 : Prévision ###############
+
 
 
 
