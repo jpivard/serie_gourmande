@@ -57,7 +57,7 @@ summary(donnees$valeurs)
 
 ####### Représentation graphique de la série et premières transformations
 
-#par(mfrow=c(1,1))
+par(mfrow=c(1,2))
 
 ?plot
 abscisse=1990+7*(0:5)
@@ -94,9 +94,17 @@ pacf(donnees$valeurs)
 
 ?diff
 donnees$Dvaleurs=zoo(c(NA,diff(donnees$valeurs,1)),order.by=donnees$dates)
-str(donnees$Dvaleurs)  
+str(donnees$Dvaleurs)
 
-plot(donnees$Dvaleurs[2:nrow(donnees)],type="l",xlab="Dates",ylab=" Série différenciée de la production de cacao,chocolat et confiseries")
+
+par(mfrow=c(2,1))
+
+?plot
+abscisse=1990+7*(0:5)
+plot(donnees$valeurs,type="l",xlab="Dates",ylab="Série en valeur")
+axis(side=1,abscisse)
+
+plot(donnees$Dvaleurs[2:nrow(donnees)],type="l",xlab="Dates",ylab=" Série différenciée")
 axis(side=1,abscisse)
 #La série différenciée d'ordre 1 semble stationnaire.Elle semble évoluer autour d'une moyenne proche de zéro, 
 # elle a sans doute un écart-type assez élevé puisqu'elle est assez volatile (surtout à partir de 2010, avant elle l'est moins).
@@ -113,16 +121,13 @@ summary(regLinProdChoco)
 
 #On va donc faire un ADF "basique", i.e. sans constante ni tendance, d'abord sur la série originale.
 adfTest(donnees$valeurs,lag=0)
-
 #La p-valeur est très élevée donc on ne peut rejeter l'hypothèse nulle de racine unitaire.
 #Mais pour que le modèle soit valide, il reste à s'assurer que les résidus ne sont pas autocorrélés.
 
 #On commence graphiquement avec un autocorrélogramme.
-
 adf=adfTest(donnees$valeurs,lag=0)
 str(adf)
 acf(adf@test$lm$residuals)
-
 #On observe que l'autocorrélation de retard 1 est assez faible (-0.4), mais ensuite la plupart ne dépassent pas les bornes. 
 
 #On effectue ensuite un test de Ljung-Box sur les résidus.
@@ -189,7 +194,7 @@ Qtests(adf@test$lm$residuals,24)
 
 #Pour vérifier encore davantage cette conclusion, on pourrait ajouter tests de Phillips-Perron
 PP.test(as.ts(donnees$Dvaleurs[2:nrow(donnees)]))
-#On peut effectivement rejeter l'hypothèse de non-stationnarité de la série différencié.
+#On peut effectivement rejeter l'hypothèse de non-stationnarité de la série différenciée.
 
 
 ########### Partie 2 ####################
@@ -204,7 +209,7 @@ par(mfrow=c(1,1))
 acf(donnees$Dvaleurs[2:nrow(donnees)])
 pacf(donnees$Dvaleurs[2:nrow(donnees)])
 
-#L'ACF est significative jusqu'à l'ordre 2 donc on prend q*=2 (on pourrait aller plus loin toutefois)
+#L'ACF est significative jusqu'à l'ordre 2 donc on prend q*=2 (on pourrait aller plus loin toutefois, mais cela complexifierait sans doute trop le modèle)
 #Quant au PACF, on peut aller jusqu'à l'ordre 4 maximum (on aurait pu s'arrêter à trois), d'où le choix p*=4.
 
 #Ainsi, les modèles possibles pour la série corrigée sont tous les ARMA (p,q) où p est inférieur à 4 et q inférieur à 2.
@@ -277,14 +282,43 @@ lapply(seq(2,24),Box.test,x=model2$residuals,type="Box-Pierce",fitdf=1)  #1 degr
 #Les ARIMA(1,1,2) et ARIMA(0,1,1)  sont tous les deux bien ajustés à notre série, valides, et minimisent un des critères d'information, donc on les choisit.
 #Il va sans doute falloir en choisir un seul des deux...
 
+#Il semble plus raisonnable de retenir un modèle légèrement plus complexe qu'une simple moyenne mobile d'ordre 1, dans la mesure où les autocorrélations partielles ne sont plus significatives à des ordres élevés (i.e. logique d'inclure une partie AR)
+
+
+#Autre critère de choix possible : regarder les R carrés.
+
+adj_r2 = function(model,sample=x){
+  ss_res = sum(model$residuals^2) #somme des residus au carre
+  p = length(model$model$phi) #recupere l'ordre AR
+  q = length(model$model$theta[model$model$theta!=0]) #recupere l'ordre MA
+  ss_tot <- sum(sample[-max(p,q)]^2) #somme des observations de l'echantillon au carre
+  n <- length(sample[-max(p,q)]) #taille de l'echantillon
+  adj_r2 <- 1-(ss_res/(n-p-q-1))/(ss_tot/(n-1)) #r2 ajuste ; il n'y a plus croissance mécanique de ce type de r2 ; donc c'est un bon allié, il permet de viser la parcimonie du modèle
+  return(adj_r2)
+}
+
+modelInitialAIC=arima(donnees$valeurs,c(0,0,1))
+modelInitialAIC
+modelInitialBIC=arima(donnees$valeurs,c(0,1,2))
+modelInitialBIC
+adj_r2(modelInitialAIC,sample=donnees$valeurs)
+adj_r2(modelInitialBIC,sample=donnees$valeurs)
+
+#On obtient des R carrés ajustés très élevés (sans doute trop, cela s'explique par l'intégration), ce qui impose de manier cette statistique avec prudence sur des séries temp.
+#En tout cas, la conclusion est la même : le modèle un peu plus complexe aurait un pouvoir explicatif légèrement supérieur (on l'avait deviné avant le test)
+
+#On va donc retenir l'ARMA(1,2) sur Y_t, i.e. un ARIMA (1,1,2) sur la série X_t.
+
 
 ### Comparaison avec le résultat de auto.arima
 
 auto.arima(donnees$Dvaleurs,seasonal=FALSE)
-#auto arima choisit quant à lui une moyenne mobile d'ordre 2 (et centrée) sur la série différenciée.
+#auto arima choisit quant à lui une moyenne mobile d'ordre 2 (et centrée) sur la série différenciée. Mais il faut être prudent car cette commande ne vérifie pas la significativité, et la validité.
+
 
 
 ####### Partie 3 : Prévision ###############
+
 
 
 
